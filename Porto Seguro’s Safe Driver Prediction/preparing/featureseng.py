@@ -1,0 +1,57 @@
+from sklearn.ensemble import RandomForestClassifier
+from sklearn.feature_selection import SelectFromModel
+
+
+class FeaturesSelection(object):
+    """
+    """
+    def DefineXTrainYtrain(train, train_col_drop, test, test_col_drop):
+
+        X_train = train.drop(train_col_drop, axis=1)
+        y_train = train[test_col_drop]
+        return X_train,y_train
+
+    def RFFeatureImp(X_train, y_train):
+        """
+        """
+        feat_labels = X_train.columns
+
+        rf = RandomForestClassifier(n_estimators=1000, random_state=0, n_jobs=-1)
+
+        rf.fit(X_train, y_train)
+        importances = rf.feature_importances_
+
+        indices = np.argsort(rf.feature_importances_)[::-1]
+
+        for f in range(X_train.shape[1]):
+            print("%2d) %-*s %f" % (f + 1, 30,feat_labels[indices[f]], importances[indices[f]]))
+
+        return rf, feat_labels
+
+    def SelectingFeatures(X_train, rf, feat_labels):
+
+        sfm = SelectFromModel(rf, threshold='median', prefit=True)
+        print('Number of features before selection: {}'.format(X_train.shape[1]))
+        n_features = sfm.transform(X_train).shape[1]
+        print('Number of features after selection: {}'.format(n_features))
+        selected_vars = list(feat_labels[sfm.get_support()])
+
+
+        train_selected_vars = ['id', 'target'] + selected_vars
+        test_selected_vars  = ['id'] + selected_vars
+
+        return train_selected_vars, test_selected_vars
+
+    def MainFeatureSelection(train, train_col_drop, test, test_col_drop):
+        """
+        """
+        assert type(train_col_drop)==list, "columns is not list "
+        for w in train_col_drop: assert w in train.columns, 'Column name is not in train'
+        assert test_col_drop in train.columns, 'Column name is not in test'
+
+        X_train,y_train = DefineXTrainYtrain(train, train_col_drop, test, test_col_drop)
+        rf, feat_labels = RFFeatureImp(X_train, y_train)
+        train_selected_vars, test_selected_vars = SelectingFeatures(X_train, rf, feat_labels)
+    
+
+        return train[train_selected_vars], test[test_selected_vars]

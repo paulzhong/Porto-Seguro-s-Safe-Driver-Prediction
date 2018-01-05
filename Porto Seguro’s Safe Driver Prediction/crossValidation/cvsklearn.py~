@@ -1,0 +1,56 @@
+from sklearn.preprocessing import StandardScaler
+from sklearn.metrics import roc_auc_score
+
+from sklearn.model_selection import train_test_split
+from sklearn.model_selection import StratifiedKFold
+
+import time
+
+def cross_validate_sklearn(clf, x_train, y_train , x_test, kf,scale=False, verbose=True):
+    start_time=time.time()
+    
+    # initialise the size of out-of-fold train an test prediction
+    train_pred = np.zeros((x_train.shape[0]))
+    test_pred = np.zeros((x_test.shape[0]))
+
+    # use the kfold object to generate the required folds
+    for i, (train_index, test_index) in enumerate(kf.split(x_train, y_train)):
+        # generate training folds and validation fold
+        x_train_kf, x_val_kf = x_train.loc[train_index, :], x_train.loc[test_index, :]
+        y_train_kf, y_val_kf = y_train[train_index], y_train[test_index]
+
+        # perform scaling if required i.e. for linear algorithms
+        if scale:
+            scaler = StandardScaler().fit(x_train_kf.values)
+            x_train_kf_values = scaler.transform(x_train_kf.values)
+            x_val_kf_values = scaler.transform(x_val_kf.values)
+            x_test_values = scaler.transform(x_test.values)
+        else:
+            x_train_kf_values = x_train_kf.values
+            x_val_kf_values = x_val_kf.values
+            x_test_values = x_test.values
+        
+        # fit the input classifier and perform prediction.
+        clf.fit(x_train_kf_values, y_train_kf.values)
+        val_pred=clf.predict_proba(x_val_kf_values)[:,1]
+        train_pred[test_index] += val_pred
+
+        y_test_preds = clf.predict_proba(x_test_values)[:,1]
+        test_pred += y_test_preds
+
+        fold_auc = roc_auc_score(y_val_kf.values, val_pred)
+        fold_gini_norm = auc_to_gini_norm(fold_auc)
+
+        if verbose:
+            print('fold cv {} AUC score is {:.6f}, Gini_Norm score is {:.6f}'.format(i, fold_auc, fold_gini_norm))
+
+    test_pred /= kf.n_splits
+
+    cv_auc = roc_auc_score(y_train, train_pred)
+    cv_gini_norm = auc_to_gini_norm(cv_auc)
+    cv_score = [cv_auc, cv_gini_norm]
+    if verbose:
+        print('cv AUC score is {:.6f}, Gini_Norm score is {:.6f}'.format(cv_auc, cv_gini_norm))
+        end_time = time.time()
+        print("it takes %.3f seconds to perform cross validation" % (end_time - start_time))
+    return cv_score, train_pred,test_pred
